@@ -1,0 +1,91 @@
+name: Monthly Order Update
+
+on:
+  # Run at 6am UTC on the 1st of every month
+  schedule:
+    - cron: '0 6 1 * *'
+
+  # Allow manual trigger from the GitHub Actions tab
+  workflow_dispatch:
+    inputs:
+      force_reanalyze:
+        description: 'Re-analyze all orders (not just new ones)'
+        required: false
+        default: 'false'
+        type: boolean
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # needed to commit updated files back to repo
+
+    steps:
+      # ── 1. Check out the repository ──
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      # ── 2. Set up Python ──
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      # ── 3. Install dependencies ──
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install anthropic requests beautifulsoup4 lxml
+
+      # ── 4. Run the analysis pipeline ──
+      # ANTHROPIC_API_KEY is stored as a GitHub Secret.
+      # Never put your API key directly in this file.
+      - name: Run scrape + analyze pipeline
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          cd scripts
+          if [ "${{ github.event.inputs.force_reanalyze }}" = "true" ]; then
+            python analyze.py --force
+          else
+            python analyze.py
+          fi
+
+      # ── 5. Rebuild the static HTML tool ──
+      - name: Build index.html
+        run: |
+          cd scripts
+          python build.py
+
+      # ── 6. Commit and push changes ──
+      - name: Commit updated data and site
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/orders.json index.html
+          # Only commit if there are actual changes
+          git diff --staged --quiet || git commit -m "Auto-update: $(date +'%Y-%m-%d') — monthly order refresh"
+          git push
+
+      # ── 7. Print summary ──
+      - name: Print pipeline summary
+        run: |
+          echo "=== Pipeline complete ==="
+          python -c "
+          import json
+          with open('data/orders.json') as f:
+              data = json.load(f)
+          analyzed = sum(1 for o in data.values() if o.get('analyzed'))
+          print(f'Total orders: {len(data)}')
+          print(f'Analyzed: {analyzed}')
+          themes = {}
+          for o in data.values():
+              t = o.get('theme','Unknown') or 'Unknown'
+              themes[t] = themes.get(t,0)+1
+          print('Theme breakdown:')
+          for t,n in sorted(themes.items(), key=lambda x:-x[1]):
+              print(f'  {t}: {n}')
+          "
