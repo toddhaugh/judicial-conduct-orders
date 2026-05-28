@@ -242,7 +242,7 @@ def run_pipeline(force_reanalyze: bool = False) -> dict:
         o for o in dataset.values()
         if (not o.get("analyzed") or force_reanalyze)
         and o.get("pdf_url")
-        and not o.get("analysis_error", "").startswith("PDF not machine-readable")
+        and not (o.get("analysis_error") or "").startswith("PDF not machine-readable")
     ]
 
     log.info(f"=== Analyzing {len(to_analyze)} orders ===")
