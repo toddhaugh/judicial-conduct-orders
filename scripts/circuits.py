@@ -47,7 +47,7 @@ COMMITTEE = {
 }
 
 # Model to use for PDF analysis
-CLAUDE_MODEL = "claude-sonnet-4-20250514"
+CLAUDE_MODEL = "claude-haiku-4-5-20251001"
 
 # Seconds to wait between API calls (respect rate limits)
 API_DELAY = 1.2
